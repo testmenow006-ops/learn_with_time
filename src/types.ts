@@ -1,0 +1,56 @@
+export type Section = { key: string; label: string; enabled: boolean };
+export type Design = {
+  primary: string;
+  accent: string;
+  background: string;
+  font: "DM Sans" | "Georgia" | "Inter" | "Lora";
+  radius: "8px" | "18px" | "28px";
+  layout: "comfortable" | "compact" | "spacious";
+};
+export type ContentItem = {
+  id: number;
+  title: string;
+  slug: string;
+  type: "article" | "material" | "video" | "announcement" | "achievement" | "resource";
+  excerpt: string;
+  body: string;
+  cover_image: string;
+  file_url: string;
+  video_url: string;
+  tags: string[];
+  category_id: number | null;
+  category_name?: string;
+  status?: "draft" | "published" | "scheduled";
+  scheduled_at?: string | null;
+  seo_title?: string;
+  seo_description?: string;
+  published_at?: string | null;
+  created_at?: string;
+  updated_at?: string;
+};
+export type SiteData = {
+  profile: {
+    name: string;
+    designation: string;
+    introduction: string;
+    biography: string;
+    location: string;
+    email: string;
+    phone: string;
+    profile_image: string;
+    cover_image: string;
+    social_links: Record<string, string>;
+  };
+  qualifications: { id?: number; degree: string; institution: string; year: string }[];
+  experiences: { id?: number; role: string; organization: string; period: string; description: string }[];
+  subjects: { id?: number; name: string }[];
+  skills: { id?: number; name: string }[];
+  achievements: { id?: number; title: string; organization: string; year: string }[];
+  testimonials: { id?: number; quote: string; author: string; detail: string }[];
+  gallery: { id: number; url: string; original_name: string }[];
+  contents: ContentItem[];
+  categories: { id: number; name: string; slug: string }[];
+  design: Design;
+  template: string;
+  sections: Section[];
+};

@@ -1,0 +1,28 @@
+{
+  "name": "teacher-portfolio",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently -k \"npm:dev:client\" \"npm:dev:server\"",
+    "dev:client": "vite --host 0.0.0.0",
+    "dev:server": "php -d upload_max_filesize=10M -d post_max_size=11M -d max_file_uploads=1 -S 0.0.0.0:${PORT:-3001} -t . index.php",
+    "build": "tsc --noEmit -p tsconfig.json && vite build",
+    "start": "php -d upload_max_filesize=10M -d post_max_size=11M -d max_file_uploads=1 -S 0.0.0.0:${PORT:-3001} -t . index.php",
+    "setup": "php index.php setup/install",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "lucide-react": "^0.468.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.2",
+    "@types/react-dom": "^19.2.2",
+    "@vitejs/plugin-react": "^5.1.1",
+    "concurrently": "^9.2.1",
+    "typescript": "^5.9.3",
+    "vite": "^7.2.2"
+  }
+}
