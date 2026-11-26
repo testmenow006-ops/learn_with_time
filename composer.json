@@ -7,7 +7,7 @@
     "codeigniter/framework": "3.1.13",
     "ext-fileinfo": "*",
     "ext-iconv": "*",
-    "ext-pgsql": "*",
+    "ext-mysqli": "*",
     "vlucas/phpdotenv": "^5.6"
   },
   "config": {

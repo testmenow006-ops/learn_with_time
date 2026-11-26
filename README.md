@@ -1,10 +1,10 @@
 # Little Corner — Teacher Portfolio
 
-A responsive teacher portfolio and resource library with a protected admin studio. The React/TypeScript frontend uses a CodeIgniter 3 (PHP) API and PostgreSQL database. Five templates all render the same teacher profile and published content.
+A responsive teacher portfolio and resource library with a protected admin studio. The React/TypeScript frontend uses a CodeIgniter 3 (PHP) API and MySQL database. Five templates all render the same teacher profile and published content.
 
 ## Run locally
 
-Requirements: Node.js 20.19+, PHP 7.4+ with `pgsql`, `fileinfo`, and `iconv` extensions, Composer, and Docker (or a PostgreSQL 15+ server).
+Requirements: Node.js 20.19+, PHP 7.4+ with `mysqli`, `fileinfo`, and `iconv` extensions, Composer, and Docker (or a MySQL 8+ server).
 
 ```sh
 npm install
@@ -39,7 +39,7 @@ Deploy the PHP API through Apache/PHP-FPM or another production PHP server; `npm
 - **Public portfolio:** profile, education, experience, subjects, expertise, achievements, testimonials, photo gallery, announcements, contact form, social links, and a searchable/filterable resource library.
 - **Teacher studio:** overview analytics, portfolio editor, image/document uploads, content CRUD, categories, scheduling, SEO fields, inbox, design controls, template selection, draft preview, publishing, and reset.
 - **Templates:** Modern Professional, Academic Classic, Creative Educator, Minimal Portfolio, and Premium Education. Template/design drafts publish separately; switching the design never changes portfolio or content records.
-- **Authentication:** bcrypt password hashes, HTTP-only SameSite session cookies stored in PostgreSQL, rate-limited login, and protected `/api/admin/*` routes.
+- **Authentication:** bcrypt password hashes, HTTP-only SameSite session cookies stored in MySQL, rate-limited login, and protected `/api/admin/*` routes.
 - **Uploads:** images, PDF and Word documents; configurable size limit (`MAX_UPLOAD_MB`, 10 MB by default). Uploaded image files are listed in the teacher's gallery. Adjust PHP's `upload_max_filesize` and `post_max_size` settings when raising this limit.
 - **Database:** `migrations/001_initial.sql` creates the user, portfolio, content, category, media, settings, messages, and analytics tables. The migration is safe to rerun.
 
@@ -51,7 +51,7 @@ Copy `.env.example` to `.env` and configure:
 | --- | --- |
 | `PORT` | PHP development/API port |
 | `APP_ENV` | `development` or `production` |
-| `DATABASE_URL` | PostgreSQL connection string |
+| `DATABASE_URL` | MySQL connection string |
 | `SESSION_SECRET` | Session encryption key; use a random 32+ character value in production |
 | `ADMIN_EMAIL` / `ADMIN_PASSWORD` | Initial demo administrator credentials |
 | `UPLOAD_DIR` | Persistent upload directory |

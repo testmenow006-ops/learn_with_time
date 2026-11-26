@@ -3,10 +3,28 @@ defined('BASEPATH') OR exit('No direct script access allowed');
 
 class Portfolio_model extends CI_Model
 {
+
+    protected $database;
+
+    public function __construct()
+    {
+        parent::__construct();
+
+        // Get database connection directly
+        $this->db = $this->load->database('default', TRUE);
+
+        if (!$this->db) {
+            show_error('Unable to initialize database connection.');
+        }
+    }
+
     public function first_user()
     {
-        return $this->db->query('SELECT id FROM users ORDER BY id LIMIT 1')->row_array();
+        $query = $this->db->query("SELECT id FROM users ORDER BY id ASC LIMIT 1" );
+
+        return $query->row_array();
     }
+
 
     public function site($userId, $draft = FALSE)
     {
@@ -25,7 +43,7 @@ class Portfolio_model extends CI_Model
             "SELECT c.*, cat.name AS category_name FROM contents c
              LEFT JOIN categories cat ON cat.id = c.category_id
              WHERE c.user_id = ? AND (c.status = 'published' OR (c.status = 'scheduled' AND c.scheduled_at <= NOW()))
-             ORDER BY COALESCE(c.published_at, c.scheduled_at) DESC NULLS LAST",
+             ORDER BY COALESCE(c.published_at, c.scheduled_at) DESC",
             array($userId)
         )->result_array();
         foreach ($contents as &$content) {
@@ -101,8 +119,8 @@ class Portfolio_model extends CI_Model
             }
         }
         if (isset($content['tags']) && is_string($content['tags'])) {
-            $value = trim($content['tags'], '{}');
-            $content['tags'] = $value === '' ? array() : str_getcsv($value, ',', '"', '\\');
+            $decoded = json_decode($content['tags'], TRUE);
+            $content['tags'] = is_array($decoded) ? $decoded : array();
         }
     }
 

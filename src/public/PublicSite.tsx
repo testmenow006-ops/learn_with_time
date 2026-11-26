@@ -1,6 +1,6 @@
 import { ArrowDown, ArrowRight, ArrowUpRight, BookOpen, Download, Eye, FileText, GraduationCap, Instagram, Linkedin, Mail, MapPin, Menu, Play, Quote, Send, Sparkles, X } from "lucide-react";
 import { useEffect, useMemo, useState, type CSSProperties, type FormEvent } from "react";
-import { api } from "../api";
+import { api, apiUrl } from "../api";
 import type { ContentItem, SiteData } from "../types";
 
 const sectionLabels: Record<string, string> = {
@@ -53,7 +53,7 @@ function ContentDialog({ item, onClose }: { item: ContentItem | null; onClose: (
         <p className="dialog-excerpt">{item.excerpt}</p>
         <div className="dialog-body">{item.body}</div>
         {item.video_url && <a className="button button-dark" href={item.video_url} target="_blank" rel="noreferrer"><Play size={16} /> Watch lesson</a>}
-        {item.file_url && <a className="button button-dark" href={`/api/public/download/${item.id}`}><Download size={16} /> Download resource</a>}
+        {item.file_url && <a className="button button-dark" href={`${apiUrl}/public/download/${item.id}`}><Download size={16} /> Download resource</a>}
         {!!item.tags.length && <div className="tag-row">{item.tags.map((tag) => <span className="tag" key={tag}>{tag}</span>)}</div>}
       </article>
     </div>

@@ -1,6 +1,7 @@
 <?php
 defined('BASEPATH') OR exit('No direct script access allowed');
 
+#[\AllowDynamicProperties]
 class Setup extends CI_Controller
 {
     public function __construct()
@@ -19,23 +20,6 @@ class Setup extends CI_Controller
             $statement = trim($statement);
             if ($statement !== '') $this->db->query($statement);
         }
-        $this->db->query(
-            "CREATE TABLE IF NOT EXISTS auth_attempts (
-                id BIGSERIAL PRIMARY KEY,
-                ip_address TEXT NOT NULL,
-                attempted_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-             )"
-        );
-        $this->db->query('CREATE INDEX IF NOT EXISTS auth_attempts_ip_time_idx ON auth_attempts(ip_address, attempted_at)');
-        $this->db->query(
-            "CREATE TABLE IF NOT EXISTS ci_sessions (
-                id VARCHAR(128) PRIMARY KEY,
-                ip_address VARCHAR(45) NOT NULL,
-                timestamp INTEGER NOT NULL DEFAULT 0,
-                data TEXT NOT NULL
-             )"
-        );
-        $this->db->query('CREATE INDEX IF NOT EXISTS ci_sessions_timestamp_idx ON ci_sessions(timestamp)');
         $this->seed();
         echo "CodeIgniter 3 database schema and seed data are ready.\n";
     }
@@ -46,12 +30,14 @@ class Setup extends CI_Controller
         $password = getenv('ADMIN_PASSWORD') ?: 'ChangeMe123!';
         $user = $this->db->query('SELECT id FROM users WHERE email = ?', array($email))->row_array();
         if (!$user) {
-            $user = $this->db->query(
-                "INSERT INTO users (email, password_hash, role) VALUES (?, ?, 'admin') RETURNING id",
+            $this->db->query(
+                "INSERT INTO users (email, password_hash, role) VALUES (?, ?, 'admin')",
                 array($email, password_hash($password, PASSWORD_BCRYPT, array('cost' => 12)))
-            )->row_array();
+            );
+            $userId = (int) $this->db->insert_id();
+        } else {
+            $userId = (int) $user['id'];
         }
-        $userId = (int) $user['id'];
         $this->db->query(
             "INSERT INTO teacher_profiles
              (user_id, name, designation, introduction, biography, location, email, phone, profile_image, cover_image, social_links)
@@ -61,8 +47,7 @@ class Setup extends CI_Controller
              'Portland, Oregon', ?, '+1 (503) 555-0142',
              'https://images.unsplash.com/photo-1551836022-d5d88e9218df?auto=format&fit=crop&w=960&q=85',
              'https://images.unsplash.com/photo-1509062522246-3755977927d7?auto=format&fit=crop&w=1800&q=85',
-             '{\"LinkedIn\":\"https://linkedin.com\",\"Instagram\":\"https://instagram.com\"}')
-             ON CONFLICT (user_id) DO NOTHING",
+             '{\"LinkedIn\":\"https://linkedin.com\",\"Instagram\":\"https://instagram.com\"}')",
             array($userId, $email)
         );
 
@@ -84,16 +69,17 @@ class Setup extends CI_Controller
         );
         $this->db->query(
             'INSERT INTO site_settings (user_id, draft_design, published_design, draft_sections, published_sections)
-             VALUES (?, ?::jsonb, ?::jsonb, ?::jsonb, ?::jsonb) ON CONFLICT (user_id) DO NOTHING',
+             VALUES (?, ?, ?, ?, ?)',
             array($userId, json_encode($design), json_encode($design), json_encode($sections), json_encode($sections))
         );
 
         $count = $this->db->query('SELECT COUNT(*) AS count FROM contents WHERE user_id = ?', array($userId))->row_array();
         if ((int) $count['count'] === 0) {
             $category = $this->db->query(
-                "INSERT INTO categories (user_id, name, slug) VALUES (?, 'Learning resources', 'learning-resources') RETURNING id",
+                "INSERT INTO categories (user_id, name, slug) VALUES (?, 'Learning resources', 'learning-resources')",
                 array($userId)
-            )->row_array();
+            );
+            $categoryId = (int) $this->db->insert_id();
             $items = array(
                 array('Small habits, big learning', 'small-habits-big-learning', 'article',
                     'A few classroom routines that help students become more independent learners.',
@@ -111,21 +97,14 @@ class Setup extends CI_Controller
             foreach ($items as $item) {
                 $this->db->query(
                     "INSERT INTO contents (user_id, category_id, title, slug, type, excerpt, body, tags, status, published_at, seo_title)
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?::text[], 'published', NOW() - ?::interval, ?)",
-                    array($userId, (int) $category['id'], $item[0], $item[1], $item[2], $item[3], $item[4],
-                        $this->pg_array($item[5]), $item[7], $item[6])
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'published', DATE_SUB(NOW(), INTERVAL ? DAY), ?)",
+                    array($userId, $categoryId, $item[0], $item[1], $item[2], $item[3], $item[4],
+                        json_encode($item[5]), (int) filter_var($item[7], FILTER_SANITIZE_NUMBER_INT), $item[6])
                 );
             }
         }
         $this->seed_profile($userId);
         $this->snapshot($userId);
-    }
-
-    private function pg_array($items)
-    {
-        return '{' . implode(',', array_map(function ($item) {
-            return '"' . str_replace(array('\\', '"'), array('\\\\', '\\"'), (string) $item) . '"';
-        }, $items)) . '}';
     }
 
     private function seed_profile($userId)
@@ -186,8 +165,8 @@ class Setup extends CI_Controller
         }
         $encoded = json_encode($snapshot, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
         $this->db->query(
-            'UPDATE site_settings SET draft_portfolio=COALESCE(draft_portfolio, ?::jsonb),
-             published_portfolio=COALESCE(published_portfolio, ?::jsonb) WHERE user_id=?',
+            'UPDATE site_settings SET draft_portfolio=COALESCE(draft_portfolio, ?),
+             published_portfolio=COALESCE(published_portfolio, ?) WHERE user_id=?',
             array($encoded, $encoded, $userId)
         );
     }

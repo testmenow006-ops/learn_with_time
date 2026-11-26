@@ -1,6 +1,16 @@
+export const API_BASE_URL = (
+  (import.meta.env.VITE_API_BASE_URL as string | undefined)
+  || "/cap3/learn_with_time"
+).replace(/\/$/, "");
+
+export function apiUrl(url: string) {
+  if (/^(?:https?:)?\/\//i.test(url) || url.startsWith("mailto:") || url.startsWith("data:")) return url;
+  return `${API_BASE_URL}${url.startsWith("/") ? url : `/${url}`}`;
+}
+
 export async function api<T>(url: string, options: RequestInit = {}): Promise<T> {
-  const response = await fetch(url, {
-    credentials: "same-origin",
+  const response = await fetch(apiUrl(url), {
+    credentials: "include",
     ...options,
     headers: {
       ...(options.body instanceof FormData ? {} : { "Content-Type": "application/json" }),
@@ -13,5 +23,5 @@ export async function api<T>(url: string, options: RequestInit = {}): Promise<T>
 }
 
 export function fileUrl(url: string) {
-  return url.startsWith("http://") || url.startsWith("https://") ? url : url || "";
+  return url ? apiUrl(url) : "";
 }

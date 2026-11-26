@@ -1,6 +1,7 @@
 <?php
 defined('BASEPATH') OR exit('No direct script access allowed');
 
+#[\AllowDynamicProperties]
 class Api extends CI_Controller
 {
     private $templates = array('modern', 'academic', 'creative', 'minimal', 'premium');
@@ -28,6 +29,28 @@ class Api extends CI_Controller
     public function __construct()
     {
         parent::__construct();
+
+        $origin = isset($_SERVER['HTTP_ORIGIN']) ? trim($_SERVER['HTTP_ORIGIN']) : '';
+        if ($origin !== '') {
+            $host = parse_url($origin, PHP_URL_HOST);
+            $isLocal = in_array($host, array('localhost', '127.0.0.1', '::1'), TRUE);
+            $isConfiguredOrigin = $origin === rtrim($this->config->item('base_url'), '/');
+
+            if ($isLocal || $isConfiguredOrigin) {
+                header('Access-Control-Allow-Origin: ' . $origin);
+                header('Access-Control-Allow-Credentials: true');
+                header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS');
+                header('Access-Control-Allow-Headers: Content-Type, Accept, Authorization, X-Requested-With');
+                header('Vary: Origin');
+            }
+        }
+
+        if ($this->input->method(TRUE) === 'OPTIONS') {
+            header('Content-Length: 0');
+            http_response_code(204);
+            exit;
+        }
+
         $this->load->model('Portfolio_model', 'portfolio');
     }
 
@@ -226,11 +249,9 @@ class Api extends CI_Controller
         return array(TRUE, $input);
     }
 
-    private function pg_array($items)
+    private function json_array($items)
     {
-        return '{' . implode(',', array_map(function ($item) {
-            return '"' . str_replace(array('\\', '"'), array('\\\\', '\\"'), (string) $item) . '"';
-        }, $items)) . '}';
+        return json_encode(array_values($items));
     }
 
     private function slugify($value)
@@ -249,9 +270,9 @@ class Api extends CI_Controller
     {
         if ($this->input->method(TRUE) !== 'POST') return $this->fail('Method not allowed.', 405);
         $ip = $this->input->ip_address();
-        if ($this->db->query("DELETE FROM auth_attempts WHERE attempted_at < NOW() - INTERVAL '15 minutes'") === FALSE) return $this->database_error();
+        if ($this->db->query("DELETE FROM auth_attempts WHERE attempted_at < DATE_SUB(NOW(), INTERVAL 15 MINUTE)") === FALSE) return $this->database_error();
         $count = $this->db->query(
-            "SELECT COUNT(*) AS count FROM auth_attempts WHERE ip_address = ? AND attempted_at >= NOW() - INTERVAL '15 minutes'",
+            "SELECT COUNT(*) AS count FROM auth_attempts WHERE ip_address = ? AND attempted_at >= DATE_SUB(NOW(), INTERVAL 15 MINUTE)",
             array($ip)
         )->row_array();
         if ((int) ($count['count'] ?? 0) >= 10) return $this->fail('Too many login attempts. Please try again later.', 429);
@@ -311,7 +332,7 @@ class Api extends CI_Controller
                 WHERE c.user_id = ? AND (c.status = 'published' OR (c.status = 'scheduled' AND c.scheduled_at <= NOW()))";
         $binds = array((int) $user['id']);
         if ($search !== NULL && $search !== '') {
-            $sql .= " AND (c.title ILIKE ? OR c.excerpt ILIKE ? OR ? = ANY(c.tags))";
+            $sql .= " AND (c.title LIKE ? OR c.excerpt LIKE ? OR JSON_CONTAINS(c.tags, JSON_QUOTE(?)))";
             $binds[] = '%' . $search . '%';
             $binds[] = '%' . $search . '%';
             $binds[] = $search;
@@ -324,7 +345,7 @@ class Api extends CI_Controller
             $sql .= ' AND cat.slug = ?';
             $binds[] = $category;
         }
-        $sql .= ' ORDER BY COALESCE(c.published_at, c.scheduled_at) DESC NULLS LAST';
+        $sql .= ' ORDER BY COALESCE(c.published_at, c.scheduled_at) DESC';
         $items = $this->db->query($sql, $binds)->result_array();
         foreach ($items as &$item) $this->portfolio->normalize_content($item);
         unset($item);
@@ -413,7 +434,7 @@ class Api extends CI_Controller
         $this->db->trans_begin();
         $this->db->query(
             'UPDATE teacher_profiles SET name=?, designation=?, introduction=?, biography=?, location=?, email=?, phone=?,
-             profile_image=?, cover_image=?, social_links=?::jsonb, updated_at=NOW() WHERE user_id=?',
+             profile_image=?, cover_image=?, social_links=?, updated_at=NOW() WHERE user_id=?',
             array($profile['name'], $profile['designation'], $profile['introduction'], $profile['biography'], $profile['location'],
                 $profile['email'], $profile['phone'], $profile['profile_image'], $profile['cover_image'],
                 json_encode($profile['social_links']), $userId)
@@ -442,7 +463,7 @@ class Api extends CI_Controller
             }
         }
         $this->db->query(
-            'UPDATE site_settings SET draft_portfolio=?::jsonb, updated_at=NOW() WHERE user_id=?',
+            'UPDATE site_settings SET draft_portfolio=?, updated_at=NOW() WHERE user_id=?',
             array(json_encode($snapshot), $userId)
         );
         if ($this->db->trans_status() === FALSE) {
@@ -492,14 +513,15 @@ class Api extends CI_Controller
         if (!$valid) return $this->fail($data);
         $result = $this->db->query(
             "UPDATE contents SET category_id=?, title=?, type=?, excerpt=?, body=?, cover_image=?, file_url=?, video_url=?,
-             tags=?::text[], status=?, scheduled_at=?, seo_title=?, seo_description=?, updated_at=NOW(),
+             tags=?, status=?, scheduled_at=?, seo_title=?, seo_description=?, updated_at=NOW(),
              published_at=CASE WHEN ?='published' THEN COALESCE(published_at, NOW()) ELSE NULL END
-             WHERE id=? AND user_id=? RETURNING *",
+             WHERE id=? AND user_id=?",
             array($data['category_id'], $data['title'], $data['type'], $data['excerpt'], $data['body'], $data['cover_image'],
-                $data['file_url'], $data['video_url'], $this->pg_array($data['tags']), $data['status'], $data['scheduled_at'],
+                $data['file_url'], $data['video_url'], $this->json_array($data['tags']), $data['status'], $data['scheduled_at'],
                 $data['seo_title'], $data['seo_description'], $data['status'], $id, $userId)
         );
-        $item = $result->row_array();
+        if ($result === FALSE) return $this->database_error();
+        $item = $this->db->query('SELECT * FROM contents WHERE id=? AND user_id=?', array($id, $userId))->row_array();
         if (!$item) return $this->fail('Content not found.', 404);
         $this->portfolio->normalize_content($item);
         return $this->json($item);
@@ -516,13 +538,13 @@ class Api extends CI_Controller
         $result = $this->db->query(
             "INSERT INTO contents (user_id, category_id, title, slug, type, excerpt, body, cover_image, file_url, video_url,
              tags, status, scheduled_at, seo_title, seo_description, published_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?::text[], ?, ?, ?, ?, CASE WHEN ?='published' THEN NOW() ELSE NULL END)
-             RETURNING *",
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CASE WHEN ?='published' THEN NOW() ELSE NULL END)",
             array($userId, $data['category_id'], $data['title'], $slug, $data['type'], $data['excerpt'], $data['body'],
-                $data['cover_image'], $data['file_url'], $data['video_url'], $this->pg_array($data['tags']), $data['status'],
+                $data['cover_image'], $data['file_url'], $data['video_url'], $this->json_array($data['tags']), $data['status'],
                 $data['scheduled_at'], $data['seo_title'], $data['seo_description'], $data['status'])
         );
-        $item = $result->row_array();
+        if ($result === FALSE) return $this->database_error();
+        $item = $this->db->query('SELECT * FROM contents WHERE id=?', array((int) $this->db->insert_id()))->row_array();
         $this->portfolio->normalize_content($item);
         return $this->json($item, 201);
     }
@@ -536,13 +558,13 @@ class Api extends CI_Controller
         if (!is_string($rawName)) return $this->fail('Category name is required.');
         $name = trim($rawName);
         if (!$this->text_ok($name, 1, 80)) return $this->fail('Category name is required.');
-        $result = $this->db->query(
-            'INSERT INTO categories (user_id, name, slug) VALUES (?, ?, ?)
-             ON CONFLICT (user_id, slug) DO UPDATE SET name=EXCLUDED.name RETURNING id, name, slug',
-            array($userId, $name, $this->slugify($name))
+        $slug = $this->slugify($name);
+        $this->db->query(
+            'INSERT INTO categories (user_id, name, slug) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE name=VALUES(name)',
+            array($userId, $name, $slug)
         );
-        if ($result === FALSE) return $this->database_error();
-        $row = $result->row_array();
+        $row = $this->db->query('SELECT id, name, slug FROM categories WHERE user_id=? AND slug=?', array($userId, $slug))->row_array();
+        if (!$row) return $this->fail('Category not found.', 404);
         $row['id'] = (int) $row['id'];
         return $this->json($row, 201);
     }
@@ -581,7 +603,7 @@ class Api extends CI_Controller
         sort($expectedSorted);
         if ($keys !== $expectedSorted) return $this->fail('Invalid section configuration.');
         if ($this->db->query(
-            'UPDATE site_settings SET draft_design=?::jsonb, draft_template=?, draft_sections=?::jsonb, updated_at=NOW() WHERE user_id=?',
+            'UPDATE site_settings SET draft_design=?, draft_template=?, draft_sections=?, updated_at=NOW() WHERE user_id=?',
             array(json_encode($design), $input['template'], json_encode($sections), $userId)
         ) === FALSE) return $this->database_error();
         return $this->json(array('success' => TRUE));
@@ -606,7 +628,7 @@ class Api extends CI_Controller
         if (!$userId) return;
         if ($this->input->method(TRUE) !== 'POST') return $this->fail('Method not allowed.', 405);
         if ($this->db->query(
-            "UPDATE site_settings SET draft_design=?::jsonb, draft_template='modern', draft_sections=?::jsonb, updated_at=NOW() WHERE user_id=?",
+            "UPDATE site_settings SET draft_design=?, draft_template='modern', draft_sections=?, updated_at=NOW() WHERE user_id=?",
             array(json_encode($this->designDefaults), json_encode($this->sectionDefaults), $userId)
         ) === FALSE) return $this->database_error();
         return $this->json(array('success' => TRUE));
@@ -620,7 +642,7 @@ class Api extends CI_Controller
         $rows = $this->db->query('SELECT * FROM contact_messages WHERE user_id=? ORDER BY created_at DESC', array($userId))->result_array();
         foreach ($rows as &$row) {
             $row['id'] = (int) $row['id'];
-            $row['is_read'] = $row['is_read'] === 't' || $row['is_read'] === TRUE;
+            $row['is_read'] = (bool) $row['is_read'];
         }
         unset($row);
         return $this->json($rows);
@@ -632,14 +654,14 @@ class Api extends CI_Controller
         if (!$userId) return;
         if ($this->input->method(TRUE) !== 'PATCH') return $this->fail('Method not allowed.', 405);
         $query = $this->db->query(
-            'UPDATE contact_messages SET is_read=NOT is_read WHERE id=? AND user_id=? RETURNING id, is_read',
+            'UPDATE contact_messages SET is_read=NOT is_read WHERE id=? AND user_id=?',
             array((int) $id, $userId)
         );
         if ($query === FALSE) return $this->database_error();
-        $result = $query->row_array();
+        $result = $this->db->query('SELECT id, is_read FROM contact_messages WHERE id=? AND user_id=?', array((int) $id, $userId))->row_array();
         if (!$result) return $this->fail('Message not found.', 404);
         $result['id'] = (int) $result['id'];
-        $result['is_read'] = $result['is_read'] === 't' || $result['is_read'] === TRUE;
+        $result['is_read'] = (bool) $result['is_read'];
         return $this->json($result);
     }
 
@@ -677,14 +699,14 @@ class Api extends CI_Controller
         $url = '/uploads/' . $filename;
         $originalName = basename($file['name']);
         $query = $this->db->query(
-            'INSERT INTO media (user_id, url, original_name, mime_type) VALUES (?, ?, ?, ?) RETURNING id',
+            'INSERT INTO media (user_id, url, original_name, mime_type) VALUES (?, ?, ?, ?)',
             array($userId, $url, $originalName, $mime)
         );
-        if ($query === FALSE || !($result = $query->row_array())) {
+        if ($query === FALSE) {
             unlink(rtrim($directory, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . $filename);
-            if ($query === FALSE) return $this->database_error();
-            return $this->fail('The file uploaded but could not be added to your media library.', 500);
+            return $this->database_error();
         }
+        $result = array('id' => (int) $this->db->insert_id());
         return $this->json(array('id' => (int) $result['id'], 'url' => $url, 'name' => $originalName, 'size' => (int) $file['size']), 201);
     }
 

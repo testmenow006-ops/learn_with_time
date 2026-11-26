@@ -1,149 +1,165 @@
 CREATE TABLE IF NOT EXISTS users (
-  id SERIAL PRIMARY KEY,
-  email TEXT NOT NULL UNIQUE,
-  password_hash TEXT NOT NULL,
-  role TEXT NOT NULL DEFAULT 'teacher' CHECK (role IN ('teacher', 'admin')),
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  email VARCHAR(255) NOT NULL UNIQUE,
+  password_hash VARCHAR(255) NOT NULL,
+  role VARCHAR(20) NOT NULL DEFAULT 'teacher',
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT users_role_check CHECK (role IN ('teacher', 'admin'))
 );
 
 CREATE TABLE IF NOT EXISTS teacher_profiles (
-  id SERIAL PRIMARY KEY,
-  user_id INTEGER NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
-  name TEXT NOT NULL DEFAULT 'Alex Morgan',
-  designation TEXT NOT NULL DEFAULT 'Educator & lifelong learner',
-  introduction TEXT NOT NULL DEFAULT '',
-  biography TEXT NOT NULL DEFAULT '',
-  location TEXT NOT NULL DEFAULT '',
-  email TEXT NOT NULL DEFAULT '',
-  phone TEXT NOT NULL DEFAULT '',
-  profile_image TEXT NOT NULL DEFAULT '',
-  cover_image TEXT NOT NULL DEFAULT '',
-  social_links JSONB NOT NULL DEFAULT '{}',
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  user_id INT UNSIGNED NOT NULL UNIQUE,
+  name VARCHAR(255) NOT NULL DEFAULT 'Alex Morgan',
+  designation VARCHAR(255) NOT NULL DEFAULT 'Educator & lifelong learner',
+  introduction TEXT NOT NULL,
+  biography TEXT NOT NULL,
+  location VARCHAR(255) NOT NULL DEFAULT '',
+  email VARCHAR(255) NOT NULL DEFAULT '',
+  phone VARCHAR(255) NOT NULL DEFAULT '',
+  profile_image TEXT NOT NULL,
+  cover_image TEXT NOT NULL,
+  social_links JSON NOT NULL,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  CONSTRAINT teacher_profiles_user_fk FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS qualifications (
-  id SERIAL PRIMARY KEY,
-  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  degree TEXT NOT NULL,
-  institution TEXT NOT NULL,
-  year TEXT NOT NULL DEFAULT ''
+  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  user_id INT UNSIGNED NOT NULL,
+  degree VARCHAR(255) NOT NULL,
+  institution VARCHAR(255) NOT NULL,
+  year VARCHAR(50) NOT NULL DEFAULT '',
+  CONSTRAINT qualifications_user_fk FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 CREATE TABLE IF NOT EXISTS experiences (
-  id SERIAL PRIMARY KEY,
-  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  role TEXT NOT NULL,
-  organization TEXT NOT NULL,
-  period TEXT NOT NULL DEFAULT '',
-  description TEXT NOT NULL DEFAULT ''
+  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  user_id INT UNSIGNED NOT NULL,
+  role VARCHAR(255) NOT NULL,
+  organization VARCHAR(255) NOT NULL,
+  period VARCHAR(255) NOT NULL DEFAULT '',
+  description TEXT NOT NULL,
+  CONSTRAINT experiences_user_fk FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 CREATE TABLE IF NOT EXISTS subjects (
-  id SERIAL PRIMARY KEY,
-  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  name TEXT NOT NULL
+  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  user_id INT UNSIGNED NOT NULL,
+  name VARCHAR(255) NOT NULL,
+  CONSTRAINT subjects_user_fk FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 CREATE TABLE IF NOT EXISTS skills (
-  id SERIAL PRIMARY KEY,
-  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  name TEXT NOT NULL
+  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  user_id INT UNSIGNED NOT NULL,
+  name VARCHAR(255) NOT NULL,
+  CONSTRAINT skills_user_fk FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 CREATE TABLE IF NOT EXISTS achievements (
-  id SERIAL PRIMARY KEY,
-  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  title TEXT NOT NULL,
-  organization TEXT NOT NULL DEFAULT '',
-  year TEXT NOT NULL DEFAULT ''
+  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  user_id INT UNSIGNED NOT NULL,
+  title VARCHAR(255) NOT NULL,
+  organization VARCHAR(255) NOT NULL DEFAULT '',
+  year VARCHAR(50) NOT NULL DEFAULT '',
+  CONSTRAINT achievements_user_fk FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 CREATE TABLE IF NOT EXISTS testimonials (
-  id SERIAL PRIMARY KEY,
-  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  user_id INT UNSIGNED NOT NULL,
   quote TEXT NOT NULL,
-  author TEXT NOT NULL,
-  detail TEXT NOT NULL DEFAULT ''
+  author VARCHAR(255) NOT NULL,
+  detail VARCHAR(255) NOT NULL DEFAULT '',
+  CONSTRAINT testimonials_user_fk FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 CREATE TABLE IF NOT EXISTS media (
-  id SERIAL PRIMARY KEY,
-  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  user_id INT UNSIGNED NOT NULL,
   url TEXT NOT NULL,
-  original_name TEXT NOT NULL,
-  mime_type TEXT NOT NULL,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  original_name VARCHAR(255) NOT NULL,
+  mime_type VARCHAR(100) NOT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT media_user_fk FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS categories (
-  id SERIAL PRIMARY KEY,
-  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  name TEXT NOT NULL,
-  slug TEXT NOT NULL,
-  UNIQUE (user_id, slug)
+  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  user_id INT UNSIGNED NOT NULL,
+  name VARCHAR(255) NOT NULL,
+  slug VARCHAR(255) NOT NULL,
+  UNIQUE (user_id, slug),
+  CONSTRAINT categories_user_fk FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 CREATE TABLE IF NOT EXISTS contents (
-  id SERIAL PRIMARY KEY,
-  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  category_id INTEGER REFERENCES categories(id) ON DELETE SET NULL,
-  title TEXT NOT NULL,
-  slug TEXT NOT NULL,
-  type TEXT NOT NULL CHECK (type IN ('article', 'material', 'video', 'announcement', 'achievement', 'resource')),
-  excerpt TEXT NOT NULL DEFAULT '',
-  body TEXT NOT NULL DEFAULT '',
-  cover_image TEXT NOT NULL DEFAULT '',
-  file_url TEXT NOT NULL DEFAULT '',
-  video_url TEXT NOT NULL DEFAULT '',
-  tags TEXT[] NOT NULL DEFAULT '{}',
-  status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'published', 'scheduled')),
-  scheduled_at TIMESTAMPTZ,
-  seo_title TEXT NOT NULL DEFAULT '',
-  seo_description TEXT NOT NULL DEFAULT '',
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  published_at TIMESTAMPTZ,
-  UNIQUE (user_id, slug)
+  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  user_id INT UNSIGNED NOT NULL,
+  category_id INT UNSIGNED NULL,
+  title VARCHAR(255) NOT NULL,
+  slug VARCHAR(255) NOT NULL,
+  type VARCHAR(20) NOT NULL,
+  excerpt TEXT NOT NULL,
+  body TEXT NOT NULL,
+  cover_image TEXT NOT NULL,
+  file_url TEXT NOT NULL,
+  video_url TEXT NOT NULL,
+  tags JSON NOT NULL,
+  status VARCHAR(20) NOT NULL DEFAULT 'draft',
+  scheduled_at TIMESTAMP NULL,
+  seo_title VARCHAR(255) NOT NULL DEFAULT '',
+  seo_description TEXT NOT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  published_at TIMESTAMP NULL,
+  UNIQUE (user_id, slug),
+  CONSTRAINT contents_type_check CHECK (type IN ('article', 'material', 'video', 'announcement', 'achievement', 'resource')),
+  CONSTRAINT contents_status_check CHECK (status IN ('draft', 'published', 'scheduled')),
+  CONSTRAINT contents_user_fk FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  CONSTRAINT contents_category_fk FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE SET NULL
 );
-CREATE INDEX IF NOT EXISTS contents_public_idx ON contents(user_id, status, published_at DESC);
+CREATE INDEX contents_public_idx ON contents(user_id, status, published_at);
 
 CREATE TABLE IF NOT EXISTS site_settings (
-  user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
-  draft_design JSONB NOT NULL DEFAULT '{}',
-  published_design JSONB NOT NULL DEFAULT '{}',
-  draft_template TEXT NOT NULL DEFAULT 'modern',
-  published_template TEXT NOT NULL DEFAULT 'modern',
-  draft_sections JSONB NOT NULL DEFAULT '[]',
-  published_sections JSONB NOT NULL DEFAULT '[]',
-  draft_portfolio JSONB,
-  published_portfolio JSONB,
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  user_id INT UNSIGNED PRIMARY KEY,
+  draft_design JSON NOT NULL,
+  published_design JSON NOT NULL,
+  draft_template VARCHAR(50) NOT NULL DEFAULT 'modern',
+  published_template VARCHAR(50) NOT NULL DEFAULT 'modern',
+  draft_sections JSON NOT NULL,
+  published_sections JSON NOT NULL,
+  draft_portfolio JSON NULL,
+  published_portfolio JSON NULL,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  CONSTRAINT site_settings_user_fk FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
-ALTER TABLE site_settings ADD COLUMN IF NOT EXISTS draft_portfolio JSONB;
-ALTER TABLE site_settings ADD COLUMN IF NOT EXISTS published_portfolio JSONB;
 CREATE TABLE IF NOT EXISTS contact_messages (
-  id SERIAL PRIMARY KEY,
-  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  name TEXT NOT NULL,
-  email TEXT NOT NULL,
-  subject TEXT NOT NULL DEFAULT '',
+  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  user_id INT UNSIGNED NOT NULL,
+  name VARCHAR(255) NOT NULL,
+  email VARCHAR(255) NOT NULL,
+  subject VARCHAR(255) NOT NULL DEFAULT '',
   message TEXT NOT NULL,
   is_read BOOLEAN NOT NULL DEFAULT FALSE,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT contact_messages_user_fk FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 CREATE TABLE IF NOT EXISTS analytics (
-  id BIGSERIAL PRIMARY KEY,
-  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  event TEXT NOT NULL CHECK (event IN ('visit', 'download', 'contact')),
-  path TEXT NOT NULL DEFAULT '/',
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  user_id INT UNSIGNED NOT NULL,
+  event VARCHAR(20) NOT NULL,
+  path VARCHAR(255) NOT NULL DEFAULT '/',
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT analytics_event_check CHECK (event IN ('visit', 'download', 'contact')),
+  CONSTRAINT analytics_user_fk FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS auth_attempts (
-  id BIGSERIAL PRIMARY KEY,
-  ip_address TEXT NOT NULL,
-  attempted_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  ip_address VARCHAR(45) NOT NULL,
+  attempted_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  INDEX auth_attempts_ip_time_idx (ip_address, attempted_at)
 );
-CREATE INDEX IF NOT EXISTS auth_attempts_ip_time_idx ON auth_attempts(ip_address, attempted_at);
 
 CREATE TABLE IF NOT EXISTS ci_sessions (
   id VARCHAR(128) PRIMARY KEY,
   ip_address VARCHAR(45) NOT NULL,
   timestamp INTEGER NOT NULL DEFAULT 0,
-  data TEXT NOT NULL
+  data TEXT NOT NULL,
+  INDEX ci_sessions_timestamp_idx (timestamp)
 );
-CREATE INDEX IF NOT EXISTS ci_sessions_timestamp_idx ON ci_sessions(timestamp);

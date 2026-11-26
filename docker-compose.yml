@@ -1,13 +1,15 @@
 services:
   db:
-    image: postgres:17-alpine
+    image: mysql:8.4
     environment:
-      POSTGRES_DB: teacher_portfolio
-      POSTGRES_USER: portfolio
-      POSTGRES_PASSWORD: portfolio
+      MYSQL_DATABASE: teacher_portfolio
+      MYSQL_USER: portfolio
+      MYSQL_PASSWORD: portfolio
+      MYSQL_ROOT_PASSWORD: root
     ports:
-      - "5432:5432"
+      - "3306:3306"
     volumes:
-      - portfolio_db:/var/lib/postgresql/data
+      - portfolio_db:/var/lib/mysql
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
 volumes:
   portfolio_db:
