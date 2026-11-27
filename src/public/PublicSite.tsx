@@ -1,6 +1,6 @@
 import { ArrowDown, ArrowRight, ArrowUpRight, BookOpen, Download, Eye, FileText, GraduationCap, Instagram, Linkedin, Mail, MapPin, Menu, Play, Quote, Send, Sparkles, X } from "lucide-react";
 import { useEffect, useMemo, useState, type CSSProperties, type FormEvent } from "react";
-import { api, apiUrl } from "../api";
+import { api, apiUrl, fileUrl } from "../api";
 import type { ContentItem, SiteData } from "../types";
 
 const sectionLabels: Record<string, string> = {
@@ -28,7 +28,7 @@ function ContentCard({ item, onOpen }: { item: ContentItem; onOpen: (item: Conte
   return (
     <button className="content-card" onClick={() => onOpen(item)}>
       <div className={`content-card-image ${!item.cover_image ? `content-image-${item.type}` : ""}`}>
-        {item.cover_image ? <img src={item.cover_image} alt="" /> : <span>{item.type === "video" ? <Play /> : item.type === "material" ? <FileText /> : <BookOpen />}</span>}
+        {item.cover_image ? <img src={fileUrl(item.cover_image)} alt="" /> : <span>{item.type === "video" ? <Play /> : item.type === "material" ? <FileText /> : <BookOpen />}</span>}
         <span className="card-kind">{kindLabels[item.type] ?? "Resource"}</span>
       </div>
       <div className="content-card-copy">
@@ -47,13 +47,13 @@ function ContentDialog({ item, onClose }: { item: ContentItem | null; onClose: (
     <div className="dialog-scrim" role="presentation" onClick={onClose}>
       <article className="content-dialog" role="dialog" aria-modal="true" aria-label={item.title} onClick={(event) => event.stopPropagation()}>
         <button className="icon-button dialog-close" onClick={onClose} aria-label="Close"><X size={19} /></button>
-        {item.cover_image && <img className="dialog-cover" src={item.cover_image} alt="" />}
+        {item.cover_image && <img className="dialog-cover" src={fileUrl(item.cover_image)} alt="" />}
         <span className="eyebrow">{kindLabels[item.type]}</span>
         <h2>{item.title}</h2>
         <p className="dialog-excerpt">{item.excerpt}</p>
         <div className="dialog-body">{item.body}</div>
         {item.video_url && <a className="button button-dark" href={item.video_url} target="_blank" rel="noreferrer"><Play size={16} /> Watch lesson</a>}
-        {item.file_url && <a className="button button-dark" href={`${apiUrl}/public/download/${item.id}`}><Download size={16} /> Download resource</a>}
+        {item.file_url && <a className="button button-dark" href={apiUrl(`/public/download/${item.id}`)}><Download size={16} /> Download resource</a>}
         {!!item.tags.length && <div className="tag-row">{item.tags.map((tag) => <span className="tag" key={tag}>{tag}</span>)}</div>}
       </article>
     </div>
@@ -96,6 +96,24 @@ export default function PublicSite({ site, onNavigate, path = "/", isPreview = f
       .then(setItems)
       .catch((reason: Error) => setLibraryError(reason.message));
   }, [category, filter, isContentPage, search, site.contents]);
+
+  useEffect(() => {
+    if (isPreview || !("geolocation" in navigator)) return;
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        void api("/api/public/visitor-location", {
+          method: "POST",
+          body: JSON.stringify({
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude,
+            accuracy: position.coords.accuracy,
+          }),
+        }).catch(() => undefined);
+      },
+      () => undefined,
+      { enableHighAccuracy: false, timeout: 10000, maximumAge: 30 * 60 * 1000 },
+    );
+  }, [isPreview]);
 
   const style = {
     "--primary": design?.primary ?? "#426b59",
@@ -140,10 +158,10 @@ export default function PublicSite({ site, onNavigate, path = "/", isPreview = f
         </button>
         <button className="mobile-toggle icon-button" onClick={() => setMobileMenu(!mobileMenu)} aria-label="Toggle navigation">{mobileMenu ? <X /> : <Menu />}</button>
         <nav className={`main-nav ${mobileMenu ? "nav-open" : ""}`}>
-          <button className={!isContentPage ? "nav-active" : ""} onClick={() => onNavigate("/")}>Portfolio</button>
-          <button className={isContentPage ? "nav-active" : ""} onClick={() => onNavigate("/content")}>Resources</button>
-          <button onClick={() => scrollTo("about")}>About</button>
-          <button className="nav-contact" onClick={() => scrollTo("contact")}>Let's talk <ArrowUpRight size={14} /></button>
+          <button className={!isContentPage ? "nav-active" : ""} onClick={() => onNavigate("/")}>My portfolio</button>
+          <button className={isContentPage ? "nav-active" : ""} onClick={() => onNavigate("/content")}>Learning library</button>
+          <button onClick={() => scrollTo("about")}>My story</button>
+          <button className="nav-contact" onClick={() => scrollTo("contact")}>Start a conversation <ArrowUpRight size={14} /></button>
         </nav>
       </header>
 
@@ -171,22 +189,27 @@ export default function PublicSite({ site, onNavigate, path = "/", isPreview = f
         <main>
           <section className="hero-section">
             <div className="hero-copy">
-              <span className="eyebrow"><span className="eyebrow-dot" /> A TEACHER'S LITTLE CORNER OF THE INTERNET</span>
-              <h1>Making room<br />for <em>curiosity.</em></h1>
-              <p>{profile?.introduction}</p>
+              <span className="eyebrow"><span className="eyebrow-dot" /> A WARM PLACE TO GROW AND DISCOVER</span>
+              <h1>Learning feels<br />better when <em>we grow together.</em></h1>
+              <p>{profile?.introduction || "Thoughtful lessons, meaningful connections and the confidence to ask questions."}</p>
               <div className="hero-actions">
-                <button className="button button-primary" onClick={() => scrollTo("about")}>A little about me <ArrowDown size={16} /></button>
-                <button className="button button-quiet" onClick={() => onNavigate("/content")}>Browse resources <ArrowRight size={16} /></button>
+                <button className="button button-primary" onClick={() => scrollTo("about")}>Meet your teacher <ArrowDown size={16} /></button>
+                <button className="button button-quiet" onClick={() => onNavigate("/content")}>Explore learning resources <ArrowRight size={16} /></button>
               </div>
-              <div className="hero-note"><span className="note-line" /> Teaching with care, in {profile?.location || "the Pacific Northwest"} <span className="note-sparkle"><Sparkles size={14} /></span></div>
+              <div className="hero-proof">
+                <div><strong>{site.qualifications.length}</strong><span>Qualifications</span></div>
+                <div><strong>{site.experiences.length}</strong><span>Teaching roles</span></div>
+                <div><strong>{site.subjects.length}</strong><span>Subjects</span></div>
+              </div>
+              <div className="hero-note"><span className="note-line" /> {profile?.designation || "Educator & lifelong learner"} <span className="note-sparkle"><Sparkles size={14} /></span></div>
             </div>
             <div className="hero-art">
               <div className="hero-image-frame">
-                <img src={profile?.cover_image || "https://images.unsplash.com/photo-1509062522246-3755977927d7?auto=format&fit=crop&w=1400&q=85"} alt="A sunlit classroom ready for students" />
+                <img src={fileUrl(profile?.cover_image) || "https://images.unsplash.com/photo-1509062522246-3755977927d7?auto=format&fit=crop&w=1400&q=85"} alt="A sunlit classroom ready for students" />
                 <div className="image-caption"><span className="caption-dot" /> A place to learn and grow</div>
               </div>
               <div className="portrait-card">
-                {profile?.profile_image ? <img src={profile.profile_image} alt={profile.name} /> : <span>{initials(profile?.name || "AM")}</span>}
+                {profile?.profile_image ? <img src={fileUrl(profile.profile_image)} alt={profile.name} /> : <span>{initials(profile?.name || "AM")}</span>}
                 <div><strong>{profile?.name}</strong><small>{profile?.designation}</small></div>
                 <div className="portrait-stamp"><Sparkles size={18} /></div>
               </div>
@@ -234,7 +257,7 @@ export default function PublicSite({ site, onNavigate, path = "/", isPreview = f
 
           {enabled("gallery") && site.gallery?.length > 0 && <section className="section gallery-section" style={{ order: sectionOrder("gallery") }}>
             <div className="section-index">06 <span>—</span> LITTLE MOMENTS</div><div className="gallery-heading"><div><span className="eyebrow">{label("gallery")}</span><h2>Some days worth remembering.</h2></div><Sparkles size={20} /></div>
-            <div className="gallery-grid">{site.gallery.map((image) => <figure key={image.id}><img src={image.url} alt={image.original_name} /><figcaption>{image.original_name}</figcaption></figure>)}</div>
+            <div className="gallery-grid">{site.gallery.map((image) => <figure key={image.id}><img src={fileUrl(image.url)} alt={image.original_name} /><figcaption>{image.original_name}</figcaption></figure>)}</div>
           </section>}
 
           {enabled("announcements") && announcements.length > 0 && <section className="section latest-section" style={{ order: sectionOrder("announcements") }}>

@@ -4,18 +4,19 @@ import {
   Trash2, Upload, UserRound, X,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState, type CSSProperties, type FormEvent, type ReactNode } from "react";
-import { api } from "../api";
+import { api, fileUrl } from "../api";
 import type { ContentItem, Design, SiteData } from "../types";
 
 type View = "overview" | "portfolio" | "content" | "design" | "templates" | "messages";
-type DashboardData = { visitors: number; published: number; drafts: number; downloads: number; messages: number; recent: { event: string; path: string; created_at: string }[] };
+type DashboardLocation = { ip_address: string; country: string; region: string; city: string; latitude: number | null; longitude: number | null; accuracy: number | null; visit_count: number; first_seen: string; last_seen: string };
+type DashboardData = { visitors: number; unique_visitors: number; total_visits: number; published: number; drafts: number; downloads: number; messages: number; locations: DashboardLocation[]; recent: { event: string; path: string; ip_address?: string; created_at: string }[] };
 type Category = { id: number; name: string; slug: string };
 const templateList = [
-  { id: "modern", name: "Modern Professional", note: "Clean lines, confident type, warm neutrals.", color: "#e9eee8", mark: "Aa" },
-  { id: "academic", name: "Academic Classic", note: "A thoughtful, bookish feel with timeless detail.", color: "#e8e1d3", mark: "A" },
-  { id: "creative", name: "Creative Educator", note: "Playful color and a little more personality.", color: "#ead6c7", mark: "✳" },
-  { id: "minimal", name: "Minimal Portfolio", note: "Quiet space for your work to speak.", color: "#edece7", mark: "—" },
-  { id: "premium", name: "Premium Education", note: "Polished details and an editorial edge.", color: "#d8dfe2", mark: "✦" },
+  { id: "modern", name: "Modern Professional", note: "Clean lines, confident type, warm neutrals.", color: "#e9eee8", mark: "Aa", preset: { primary: "#426b59", accent: "#d9a77d", background: "#f6f7f4", font: "DM Sans", radius: "18px", layout: "comfortable" } },
+  { id: "academic", name: "Academic Classic", note: "A thoughtful, bookish feel with timeless detail.", color: "#e8e1d3", mark: "A", preset: { primary: "#615244", accent: "#ad8b5e", background: "#f7f4ec", font: "Georgia", radius: "8px", layout: "spacious" } },
+  { id: "creative", name: "Creative Educator", note: "Playful color and a little more personality.", color: "#ead6c7", mark: "✳", preset: { primary: "#77538b", accent: "#e79578", background: "#fbf6f2", font: "Lora", radius: "28px", layout: "comfortable" } },
+  { id: "minimal", name: "Minimal Portfolio", note: "Quiet space for your work to speak.", color: "#edece7", mark: "—", preset: { primary: "#4a5750", accent: "#b8a88d", background: "#fafaf8", font: "Inter", radius: "8px", layout: "compact" } },
+  { id: "premium", name: "Premium Education", note: "Polished details and an editorial edge.", color: "#d8dfe2", mark: "✦", preset: { primary: "#355a52", accent: "#d2ae78", background: "#f3f5f1", font: "Lora", radius: "18px", layout: "spacious" } },
 ];
 const navItems: { key: View; label: string; icon: typeof LayoutDashboard; group: string }[] = [
   { key: "overview", label: "Overview", icon: LayoutDashboard, group: "WORKSPACE" },
@@ -58,7 +59,7 @@ function UploadField({ label, value, accept, onChange, onNotice }: { label: stri
   };
   return <div className="upload-field"><Field label={label}><input value={value} onChange={(event) => onChange(event.target.value)} placeholder="Paste an image URL or upload a file" /></Field>
     <label className="upload-button"><Upload size={15} />{uploading ? "Uploading..." : "Upload"}<input type="file" accept={accept} disabled={uploading} onChange={(event) => { void uploadFile(event.target.files?.[0]); event.currentTarget.value = ""; }} /></label>
-    {value && accept.startsWith("image/") && <img className="upload-preview" src={value} alt={`${label} preview`} />}
+    {value && accept.startsWith("image/") && <img className="upload-preview" src={fileUrl(value)} alt={`${label} preview`} />}
   </div>;
 }
 
@@ -268,13 +269,31 @@ export default function AdminApp({ onNavigate }: { onNavigate: (path: string) =>
 
 function Overview({ dashboard, items, messages, onView }: { dashboard: DashboardData | null; items: ContentItem[]; messages: { id: number; name: string; subject: string; message: string; is_read: boolean; created_at: string }[]; onView: (view: View) => void }) {
   const stats = [
-    { label: "Website visitors", value: dashboard?.visitors ?? 0, icon: Globe2, note: "All-time visits" },
+    { label: "Total visits", value: dashboard?.total_visits ?? dashboard?.visitors ?? 0, icon: Globe2, note: "All recorded visits" },
+    { label: "Unique visitors", value: dashboard?.unique_visitors ?? 0, icon: UserRound, note: "Different IP addresses" },
     { label: "Published pieces", value: dashboard?.published ?? 0, icon: FileText, note: "Out in the world" },
-    { label: "Saved drafts", value: dashboard?.drafts ?? 0, icon: Save, note: "Ready when you are" },
     { label: "Resource downloads", value: dashboard?.downloads ?? 0, icon: ArrowDown, note: "Shared with learners" },
   ];
   return <div className="overview-content"><div className="welcome-strip"><div className="welcome-mark"><Sparkles size={25} /></div><div><span>YOUR WORK IS MAKING AN IMPACT</span><p>Every resource you share makes someone's learning journey a little brighter.</p></div><button className="button button-outline button-small" onClick={() => onView("content")}>Create something <Plus size={14} /></button></div>
     <div className="stats-grid">{stats.map(({ label, value, icon: Icon, note }) => <div className="stat-card" key={label}><div className="stat-top"><span>{label}</span><Icon size={17} /></div><strong>{value.toLocaleString()}</strong><small>{note}</small></div>)}</div>
+    <section className="admin-panel visitor-location-panel">
+      <div className="panel-heading"><div><span className="eyebrow">VISITOR LOCATION</span><h2>Recent visitors</h2></div><Globe2 size={18} /></div>
+      {dashboard?.locations?.length ? (
+        <div className="visitor-location-table">
+          <div className="visitor-location-head"><span>IP address</span><span>Location</span><span>Visits</span><span>Last seen</span></div>
+          {dashboard.locations.slice(0, 10).map((location) => (
+            <div className="visitor-location-row" key={location.ip_address}>
+              <span>{location.ip_address}</span>
+              <span>{[location.city, location.region, location.country].filter(Boolean).join(", ") || (location.latitude !== null && location.longitude !== null ? `${location.latitude.toFixed(4)}, ${location.longitude.toFixed(4)}` : "Permission not granted")}</span>
+              <strong>{location.visit_count}</strong>
+              <span>{new Date(location.last_seen).toLocaleString()}</span>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="empty-admin"><Globe2 size={20} /><p>Visitor locations will appear here after visits are recorded.</p></div>
+      )}
+    </section>
     <div className="overview-grid"><section className="admin-panel"><div className="panel-heading"><div><span className="eyebrow">YOUR RECENT WORK</span><h2>Latest content</h2></div><button className="text-link" onClick={() => onView("content")}>View everything <ArrowUpRight size={14} /></button></div>
       {items.slice(0, 4).map((item) => <div className="recent-item" key={item.id}><span className={`type-icon type-${item.type}`}>{item.type === "video" ? "▶" : item.type === "material" ? "▤" : "✳"}</span><div><strong>{item.title}</strong><small>{item.type} · {new Date(item.updated_at ?? Date.now()).toLocaleDateString()}</small></div><span className={`status-pill status-${item.status}`}>{item.status}</span></div>)}
       {!items.length && <div className="empty-admin"><BookOpen size={22} /><p>Your first story is waiting to be written.</p></div>}
@@ -314,7 +333,7 @@ function MediaGallery({ site, onUpdate, onNotice }: { site: SiteData; onUpdate: 
   };
   return <section className="admin-panel aside-card gallery-manager"><div className="gallery-manager-heading"><div><span className="eyebrow">YOUR LITTLE MOMENTS</span><h3>Photo gallery</h3></div><label className="small-button"><Upload size={13} />{uploading ? "Uploading..." : "Add photo"}<input type="file" accept="image/jpeg,image/png,image/webp,image/gif" disabled={uploading} onChange={(event) => { void addPhoto(event.target.files?.[0]); event.currentTarget.value = ""; }} /></label></div>
     <p>Photos you upload here can appear in the gallery section on your website.</p>
-    {site.gallery.length ? <div className="media-grid">{site.gallery.map((photo) => <div className="media-thumb" key={photo.id}><img src={photo.url} alt={photo.original_name} /><button type="button" className="icon-button danger-quiet" onClick={() => void removePhoto(photo.id)} aria-label={`Remove ${photo.original_name}`}><Trash2 size={13} /></button></div>)}</div> : <p className="media-empty">Your photo gallery is ready for its first moment.</p>}
+    {site.gallery.length ? <div className="media-grid">{site.gallery.map((photo) => <div className="media-thumb" key={photo.id}><img src={fileUrl(photo.url)} alt={photo.original_name} /><button type="button" className="icon-button danger-quiet" onClick={() => void removePhoto(photo.id)} aria-label={`Remove ${photo.original_name}`}><Trash2 size={13} /></button></div>)}</div> : <p className="media-empty">Your photo gallery is ready for its first moment.</p>}
   </section>;
 }
 
@@ -380,7 +399,7 @@ function PortfolioEditor({ site, onSave, onUpdate, onNotice }: { site: SiteData;
       }}><Plus size={14} /> Add link</button></div>
     </section>
   </div>
-    <aside className="editor-aside"><div className="admin-panel aside-card"><span className="eyebrow">YOUR PROFILE PHOTO</span><div className="profile-preview">{draft.profile.profile_image ? <img src={draft.profile.profile_image} alt="Profile preview" /> : <span>{draft.profile.name.slice(0, 1)}</span>}</div><UploadField label="Profile image" value={draft.profile.profile_image ?? ""} accept="image/*" onChange={(value) => updateProfile("profile_image", value)} onNotice={onNotice} /><UploadField label="Cover image" value={draft.profile.cover_image ?? ""} accept="image/*" onChange={(value) => updateProfile("cover_image", value)} onNotice={onNotice} /></div>
+    <aside className="editor-aside"><div className="admin-panel aside-card"><span className="eyebrow">YOUR PROFILE PHOTO</span><div className="profile-preview">{draft.profile.profile_image ? <img src={fileUrl(draft.profile.profile_image)} alt="Profile preview" /> : <span>{draft.profile.name.slice(0, 1)}</span>}</div><UploadField label="Profile image" value={draft.profile.profile_image ?? ""} accept="image/*" onChange={(value) => updateProfile("profile_image", value)} onNotice={onNotice} /><UploadField label="Cover image" value={draft.profile.cover_image ?? ""} accept="image/*" onChange={(value) => updateProfile("cover_image", value)} onNotice={onNotice} /></div>
       <MediaGallery site={draft} onUpdate={(next) => { setDraft(next); onUpdate(next); }} onNotice={onNotice} />
       <div className="admin-panel aside-card aside-tip"><Sparkles size={18} /><h3>A note on your story</h3><p>Keep it personal. The details that feel small to you can mean a lot to the person reading them.</p></div>
       <button type="submit" className="button button-primary full-button" disabled={saving}><Save size={16} />{saving ? "Saving..." : "Save portfolio"}</button>
@@ -476,7 +495,14 @@ function DesignEditor({ site, view, onSave, onUpdate, onPublish, onNotice, onPre
     } catch (error) { onNotice(error instanceof Error ? error.message : "Could not reset design."); }
   };
   const setDesign = (key: keyof Design, value: string) => update({ design: { ...site.design, [key]: value } as Design });
-  const setTemplate = (template: string) => update({ template });
+  const setTemplate = (templateId: string) => {
+    const selected = templateList.find((template) => template.id === templateId);
+    if (!selected) return;
+    update({
+      template: templateId,
+      design: { ...site.design, ...selected.preset } as Design,
+    });
+  };
   const reorder = (source: number, target: number) => {
     if (source === target) return;
     const sections = [...site.sections];
@@ -485,13 +511,36 @@ function DesignEditor({ site, view, onSave, onUpdate, onPublish, onNotice, onPre
     update({ sections });
   };
   return <div className={`design-layout ${view === "templates" ? "templates-view" : ""}`}>
-    {view === "templates" ? <section className="template-gallery"><div className="template-gallery-heading"><div><span className="eyebrow">FIVE WAYS TO TELL YOUR STORY</span><h2>Same heart. Different look.</h2><p>Pick a starting point. Your writing and resources stay right where they are.</p></div><button className="button button-primary" onClick={() => void onPublish()}><Globe2 size={15} /> Publish template</button></div>
-      <div className="template-grid">{templateList.map((template, index) => <article className={`template-card ${site.template === template.id ? "template-selected" : ""}`} key={template.id}>
-        <div className={`template-mockup mockup-${template.id}`} style={{ backgroundColor: template.color }}><div className="mockup-bar"><span /><span /><span /></div><div className="mockup-content"><div className="mockup-serif" style={{ color: site.design.primary }}>{template.mark}</div><span className="mockup-line mockup-line-long" /><span className="mockup-line" /><div className="mockup-image" /></div><span className="template-number">0{index + 1}</span></div>
-        <div className="template-card-body"><div><h3>{template.name}</h3><p>{template.note}</p></div>{site.template === template.id ? <span className="selected-label"><Check size={14} /> Selected</span> : <button className="small-button" onClick={() => setTemplate(template.id)}>Choose template</button>}</div>
-      </article>)}</div>
-      <div className="template-note"><Sparkles size={17} /><p>Want to see your content in a different light? Choose a template and preview it before you publish.</p><button className="text-link" onClick={() => void onPreview()}>Preview website <ArrowUpRight size={14} /></button></div>
-    </section> : <>
+    {view === "templates" ? <>
+      <section className="template-gallery">
+        <div className="template-gallery-heading">
+          <div><span className="eyebrow">FIVE WAYS TO TELL YOUR STORY</span><h2>Same heart. Different look.</h2><p>Choose a template to update the live preview and design preset.</p></div>
+          <div className="template-heading-actions"><button className="button button-outline" onClick={() => void save()} disabled={saving}><Save size={15} />{saving ? "Saving..." : "Save draft"}</button><button className="button button-primary" onClick={() => void onPublish()}><Globe2 size={15} /> Publish template</button></div>
+        </div>
+        <div className="template-grid">
+          {templateList.map((template, index) => (
+            <article className={`template-card ${site.template === template.id ? "template-selected" : ""}`} key={template.id}>
+              <button type="button" className={`template-mockup mockup-${template.id}`} style={{ backgroundColor: template.preset.background }} onClick={() => setTemplate(template.id)} aria-label={`Choose ${template.name}`}>
+                <div className="mockup-bar"><span /><span /><span /><strong>{site.profile.name || "Your name"}</strong><small>Portfolio · Resources</small></div>
+                <div className="mockup-copy" style={{ "--primary": template.preset.primary } as CSSProperties}><span>TEACHER PORTFOLIO</span><h3>{template.id === "academic" ? "Knowledge" : template.id === "creative" ? "Imagine" : template.id === "minimal" ? "Teach" : template.id === "premium" ? "Learn & lead" : "Learn & grow"}<em>{template.mark}</em></h3><p>{(site.profile.introduction || "Thoughtful teaching, meaningful learning.").slice(0, 76)}</p><span className="mockup-button">Explore <ArrowRight size={7} /></span></div>
+                {site.profile.profile_image || site.profile.cover_image ? <img className="mockup-photo" src={fileUrl(site.profile.profile_image || site.profile.cover_image)} alt="" /> : <div className="mockup-photo mockup-photo-placeholder">{template.mark}</div>}
+                <span className="template-number">0{index + 1}</span>
+              </button>
+              <div className="template-card-body"><div><h3>{template.name}</h3><p>{template.note}</p></div>{site.template === template.id ? <span className="selected-label"><Check size={14} /> Selected</span> : <button className="small-button" onClick={() => setTemplate(template.id)}>Choose template</button>}</div>
+            </article>
+          ))}
+        </div>
+        <div className="template-note"><Sparkles size={17} /><p>Choosing a template applies its complete preset. You can still customize every color, font, corner style and spacing in Website Design.</p><button className="text-link" onClick={() => void onPreview()}>Preview website <ArrowUpRight size={14} /></button></div>
+      </section>
+      <aside className="design-preview template-live-preview">
+        <div className="preview-heading"><div><span className="eyebrow">LIVE TEMPLATE PREVIEW</span><h3>{templateList.find((template) => template.id === site.template)?.name || "Your template"}</h3></div><button className="icon-button" onClick={() => void onPreview()} aria-label="Open preview"><ArrowUpRight size={17} /></button></div>
+        <div className={`mini-preview mini-${site.template}`} style={{ "--primary": site.design.primary, "--accent": site.design.accent, "--page-bg": site.design.background, "--round": site.design.radius, "--font": site.design.font } as CSSProperties}>
+          <div className="mini-nav"><span>{site.profile.name || "Your name"}</span><span>Portfolio　Resources　 About</span></div><div className="mini-hero"><span className="eyebrow">A TEACHER'S LITTLE CORNER</span><h3>Making room<br />for <em>curiosity.</em></h3><p>{(site.profile.introduction || "A warm introduction for your students and visitors.").slice(0, 92)}</p><button>Learn more <ArrowUpRight size={10} /></button></div>{site.profile.profile_image || site.profile.cover_image ? <img className="mini-image-photo" src={fileUrl(site.profile.profile_image || site.profile.cover_image)} alt="" /> : <div className="mini-image"><span /></div>}<div className="mini-footer">LEARN A LITTLE EVERY DAY　 ✳</div>
+        </div>
+        <button className="button button-outline preview-open" onClick={() => void onPreview()}><Eye size={15} /> Preview full website</button>
+        <div className="publish-card"><div className="publish-status"><span className="draft-dot" /> Template changes are a draft</div><p>Publish only when this look feels right.</p><button className="button button-primary full-button" onClick={() => void onPublish()}><Globe2 size={15} /> Publish changes</button></div>
+      </aside>
+    </> : <>
       <div className="design-controls">
         <section className="admin-panel form-panel"><div className="panel-heading"><div><span className="eyebrow">START WITH A FEELING</span><h2>Your visual palette</h2></div><Palette size={20} /></div>
           <div className="color-controls">{([{ key: "primary", label: "A little color" }, { key: "accent", label: "A warm accent" }, { key: "background", label: "Page background" }] as const).map(({ key, label }) => <label className="color-setting" key={key}><span className="color-swatch" style={{ background: site.design[key] }}><input type="color" value={site.design[key]} onChange={(event) => setDesign(key, event.target.value)} /></span><span><strong>{label}</strong><small>{site.design[key].toUpperCase()}</small></span><input className="color-code" value={site.design[key]} onChange={(event) => /^#[0-9a-f]{6}$/i.test(event.target.value) && setDesign(key, event.target.value)} /></label>)}</div>
@@ -511,7 +560,7 @@ function DesignEditor({ site, view, onSave, onUpdate, onPublish, onNotice, onPre
       </div>
       <aside className="design-preview"><div className="preview-heading"><div><span className="eyebrow">A LITTLE SNEAK PEEK</span><h3>Your website</h3></div><button className="icon-button" onClick={() => void onPreview()} aria-label="Open preview"><ArrowUpRight size={17} /></button></div>
         <div className={`mini-preview mini-${site.template}`} style={{ "--primary": site.design.primary, "--accent": site.design.accent, "--page-bg": site.design.background, "--round": site.design.radius, "--font": site.design.font } as CSSProperties}>
-          <div className="mini-nav"><span>{site.profile.name}</span><span>Portfolio　Resources　 About</span></div><div className="mini-hero"><span className="eyebrow">A TEACHER'S LITTLE CORNER</span><h3>Making room<br />for <em>curiosity.</em></h3><p>{site.profile.introduction.slice(0, 92)}{site.profile.introduction.length > 92 ? "…" : ""}</p><button>Learn more <ArrowUpRight size={10} /></button></div><div className="mini-image"><span /></div><div className="mini-footer">LEARN A LITTLE EVERY DAY　 ✳</div>
+          <div className="mini-nav"><span>{site.profile.name || "Your name"}</span><span>Portfolio　Resources　 About</span></div><div className="mini-hero"><span className="eyebrow">A TEACHER'S LITTLE CORNER</span><h3>Making room<br />for <em>curiosity.</em></h3><p>{(site.profile.introduction || "A warm introduction for your students and visitors.").slice(0, 92)}{site.profile.introduction.length > 92 ? "…" : ""}</p><button>Learn more <ArrowUpRight size={10} /></button></div><div className="mini-image"><span /></div><div className="mini-footer">LEARN A LITTLE EVERY DAY　 ✳</div>
         </div><button className="button button-outline preview-open" onClick={() => void onPreview()}><Eye size={15} /> Preview full website</button>
         <div className="publish-card"><div className="publish-status"><span className="draft-dot" /> Changes are a draft</div><p>Your visitors only see published changes. Preview first, then share it when you're ready.</p><button className="button button-primary full-button" onClick={() => void onPublish()}><Globe2 size={15} /> Publish changes</button></div>
       </aside>

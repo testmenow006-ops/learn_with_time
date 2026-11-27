@@ -51,14 +51,28 @@ class Portfolio_model extends CI_Model
         }
         unset($content);
 
+        $appBase = rtrim(getenv('APP_BASE_URL') ?: '/cap3/learn_with_time_n', '/');
+
         $gallery = $this->db->query(
             "SELECT id, url, original_name FROM media WHERE user_id = ? AND mime_type LIKE 'image/%' ORDER BY created_at DESC",
             array($userId)
         )->result_array();
         foreach ($gallery as &$item) {
             $item['id'] = (int) $item['id'];
+            if (isset($item['url']) && strpos($item['url'], '/uploads/') === 0) {
+                $item['url'] = $item['url'];
+            }
         }
         unset($item);
+
+        $publicProfile = $portfolio['profile'] ?? $profile;
+        if (is_array($publicProfile)) {
+            foreach (array('profile_image', 'cover_image') as $key) {
+                if (!empty($publicProfile[$key]) && strpos($publicProfile[$key], '/uploads/') === 0) {
+                    $publicProfile[$key] =  $publicProfile[$key];
+                }
+            }
+        }
 
         return array(
             'profile' => $portfolio['profile'] ?? $profile,

@@ -1,10 +1,11 @@
 export const API_BASE_URL = (
   (import.meta.env.VITE_API_BASE_URL as string | undefined)
-  || "/cap3/learn_with_time"
+  || "/cap3/learn_with_time_n"
 ).replace(/\/$/, "");
 
 export function apiUrl(url: string) {
   if (/^(?:https?:)?\/\//i.test(url) || url.startsWith("mailto:") || url.startsWith("data:")) return url;
+  if (url === API_BASE_URL || url.startsWith(`${API_BASE_URL}/`)) return url;
   return `${API_BASE_URL}${url.startsWith("/") ? url : `/${url}`}`;
 }
 
@@ -22,6 +23,6 @@ export async function api<T>(url: string, options: RequestInit = {}): Promise<T>
   return data;
 }
 
-export function fileUrl(url: string) {
+export function fileUrl(url?: string) {
   return url ? apiUrl(url) : "";
 }

@@ -104,9 +104,42 @@ class Api extends CI_Controller
     private function record($userId, $event, $path = '/')
     {
         return $this->db->query(
-            'INSERT INTO analytics (user_id, event, path) VALUES (?, ?, ?)',
-            array($userId, $event, $path)
+            'INSERT INTO analytics (user_id, event, ip_address, path) VALUES (?, ?, ?, ?)',
+            array($userId, $event, $this->input->ip_address(), $path)
         ) !== FALSE;
+    }
+
+    private function record_visitor($userId, $location = array())
+    {
+        $ip = $this->input->ip_address();
+        if (!$ip) $ip = 'unknown';
+
+        $country = isset($location['country']) && is_string($location['country']) ? trim($location['country']) : '';
+        $region = isset($location['region']) && is_string($location['region']) ? trim($location['region']) : '';
+        $city = isset($location['city']) && is_string($location['city']) ? trim($location['city']) : '';
+        $latitude = isset($location['latitude']) && is_numeric($location['latitude']) ? (float) $location['latitude'] : NULL;
+        $longitude = isset($location['longitude']) && is_numeric($location['longitude']) ? (float) $location['longitude'] : NULL;
+        $accuracy = isset($location['accuracy']) && is_numeric($location['accuracy']) ? (float) $location['accuracy'] : NULL;
+
+        foreach (array('country' => 100, 'region' => 100, 'city' => 100) as $key => $max) {
+            $value = $$key;
+            if (strlen($value) > $max) return FALSE;
+        }
+
+        $sql = "INSERT INTO visitor_analytics
+                    (user_id, ip_address, country, region, city, latitude, longitude, accuracy, visit_count, first_seen, last_seen)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, NOW(), NOW())
+                ON DUPLICATE KEY UPDATE
+                    country = CASE WHEN VALUES(country) <> '' THEN VALUES(country) ELSE country END,
+                    region = CASE WHEN VALUES(region) <> '' THEN VALUES(region) ELSE region END,
+                    city = CASE WHEN VALUES(city) <> '' THEN VALUES(city) ELSE city END,
+                    latitude = COALESCE(VALUES(latitude), latitude),
+                    longitude = COALESCE(VALUES(longitude), longitude),
+                    accuracy = COALESCE(VALUES(accuracy), accuracy),
+                    visit_count = visit_count + 1,
+                    last_seen = NOW()";
+
+        return $this->db->query($sql, array($userId, $ip, $country, $region, $city, $latitude, $longitude, $accuracy)) !== FALSE;
     }
 
     private function text_ok($value, $min, $max, $trim = FALSE)
@@ -312,8 +345,10 @@ class Api extends CI_Controller
     {
         $user = $this->portfolio->first_user();
         if (!$user) return $this->fail('Portfolio has not been configured.', 503);
-        if (!$this->record((int) $user['id'], 'visit')) return $this->database_error();
-        return $this->json($this->portfolio->site((int) $user['id']));
+        $userId = (int) $user['id'];
+        if (!$this->record($userId, 'visit')) return $this->database_error();
+        if (!$this->record_visitor($userId)) return $this->database_error();
+        return $this->json($this->portfolio->site($userId));
     }
 
     public function public_content()
@@ -403,8 +438,25 @@ class Api extends CI_Controller
             $row = $this->db->query($sql, array($userId))->row_array();
             $counts[$key] = (int) ($row['count'] ?? 0);
         }
+        $visitorCounts = $this->db->query(
+            'SELECT COUNT(*) AS unique_visitors, COALESCE(SUM(visit_count), 0) AS total_visits
+             FROM visitor_analytics WHERE user_id = ?', array($userId)
+        )->row_array();
+        $counts['unique_visitors'] = (int) ($visitorCounts['unique_visitors'] ?? 0);
+        $counts['total_visits'] = (int) ($visitorCounts['total_visits'] ?? 0);
+        $counts['locations'] = $this->db->query(
+            'SELECT ip_address, country, region, city, latitude, longitude, accuracy, visit_count, first_seen, last_seen
+             FROM visitor_analytics WHERE user_id = ?
+             ORDER BY last_seen DESC LIMIT 100', array($userId)
+        )->result_array();
+        foreach ($counts['locations'] as &$location) {
+            $location['visit_count'] = (int) $location['visit_count'];
+            $location['latitude'] = $location['latitude'] !== NULL ? (float) $location['latitude'] : NULL;
+            $location['longitude'] = $location['longitude'] !== NULL ? (float) $location['longitude'] : NULL;
+        }
+        unset($location);
         $counts['recent'] = $this->db->query(
-            'SELECT event, path, created_at FROM analytics WHERE user_id = ? ORDER BY created_at DESC LIMIT 6',
+            'SELECT event, path, ip_address, created_at FROM analytics WHERE user_id = ? ORDER BY created_at DESC LIMIT 6',
             array($userId)
         )->result_array();
         return $this->json($counts);
@@ -696,7 +748,8 @@ class Api extends CI_Controller
         if (!move_uploaded_file($file['tmp_name'], rtrim($directory, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . $filename)) {
             return $this->fail('The file could not be saved.', 500);
         }
-        $url = '/uploads/' . $filename;
+        $appBase = rtrim(getenv('APP_BASE_URL') ?: '/cap3/learn_with_time_n', '/');
+        $url = $appBase . '/uploads/' . $filename;
         $originalName = basename($file['name']);
         $query = $this->db->query(
             'INSERT INTO media (user_id, url, original_name, mime_type) VALUES (?, ?, ?, ?)',
@@ -731,6 +784,41 @@ class Api extends CI_Controller
         if ($this->input->method(TRUE) !== 'DELETE') return $this->fail('Method not allowed.', 405);
         if ($this->db->query('DELETE FROM media WHERE id=? AND user_id=?', array((int) $id, $userId)) === FALSE) return $this->database_error();
         if (!$this->db->affected_rows()) return $this->fail('Media item not found.', 404);
+        return $this->json(array('success' => TRUE));
+    }
+
+    public function visitor_location()
+    {
+        if ($this->input->method(TRUE) !== 'POST') return $this->fail('Method not allowed.', 405);
+        $user = $this->portfolio->first_user();
+        if (!$user) return $this->fail('Portfolio has not been configured.', 503);
+
+        $input = $this->request_data();
+        $latitude = isset($input['latitude']) && is_numeric($input['latitude']) ? (float) $input['latitude'] : NULL;
+        $longitude = isset($input['longitude']) && is_numeric($input['longitude']) ? (float) $input['longitude'] : NULL;
+        $accuracy = isset($input['accuracy']) && is_numeric($input['accuracy']) ? (float) $input['accuracy'] : NULL;
+        $country = isset($input['country']) && is_string($input['country']) ? substr(trim($input['country']), 0, 100) : '';
+        $region = isset($input['region']) && is_string($input['region']) ? substr(trim($input['region']), 0, 100) : '';
+        $city = isset($input['city']) && is_string($input['city']) ? substr(trim($input['city']), 0, 100) : '';
+
+        if ($latitude !== NULL && ($latitude < -90 || $latitude > 90)) return $this->fail('Invalid latitude.');
+        if ($longitude !== NULL && ($longitude < -180 || $longitude > 180)) return $this->fail('Invalid longitude.');
+
+        $ip = $this->input->ip_address() ?: 'unknown';
+        $sql = "UPDATE visitor_analytics
+                SET country = CASE WHEN ? <> '' THEN ? ELSE country END,
+                    region = CASE WHEN ? <> '' THEN ? ELSE region END,
+                    city = CASE WHEN ? <> '' THEN ? ELSE city END,
+                    latitude = COALESCE(?, latitude),
+                    longitude = COALESCE(?, longitude),
+                    accuracy = COALESCE(?, accuracy),
+                    last_seen = NOW()
+                WHERE user_id = ? AND ip_address = ?";
+        $query = $this->db->query($sql, array(
+            $country, $country, $region, $region, $city, $city,
+            $latitude, $longitude, $accuracy, (int) $user['id'], $ip
+        ));
+        if ($query === FALSE) return $this->database_error();
         return $this->json(array('success' => TRUE));
     }
 }

@@ -10,7 +10,7 @@ Requirements: Node.js 20.19+, PHP 7.4+ with `mysqli`, `fileinfo`, and `iconv` ex
 npm install
 composer install
 cp .env.example .env
-docker compose up -d db
+#docker compose up -d db
 npm run setup
 npm run dev
 ```

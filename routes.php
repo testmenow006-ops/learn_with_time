@@ -28,3 +28,4 @@ $route['api/admin/upload'] = 'api/upload';
 $route['api/admin/media'] = 'api/media';
 $route['api/admin/media/(:num)'] = 'api/media_item/$1';
 $route['setup/install'] = 'setup/install';
+$route['api/public/visitor-location'] = 'api/visitor_location';
